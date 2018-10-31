@@ -5,7 +5,6 @@
 
 scopus_clean_authors <- function(authors){
   authors %>% 
-    slice(1:100) %>% 
     dplyr::select(coredata, affiliation_current, affiliation_history, subject_areas, author_profile) %>%
     unnest(coredata) %>% 
     mutate(scopus_id = dc_identifier %>% str_extract("\\d+")) %>% 
@@ -51,7 +50,6 @@ scopus_clean_authors <- function(authors){
 
 scopus_clean_author_publications <- function(author_publications){
   author_publications %>% 
-    slice(1:100) %>% 
     mutate(link = link %>% map(gather_group)) %>%
     mutate(afid = affiliation %>% 
              map(~{
