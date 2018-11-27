@@ -8,10 +8,10 @@ scopus_get_publication_by_author <- function(data){
   author_search_prog <- progressively(author_search, .n = nrow(data))
 
   entries <- data %>%
-    rename(scopus_id = dc_identifier) %>%
-    mutate(scopus_id = scopus_id %>% str_extract("\\d+")) %>%
-    select(scopus_id) %>%
-    mutate(publication_information = scopus_id %>% map(~{
+    # rename(scopus_id = dc_identifier) %>%
+    # mutate(scopus_id = scopus_id %>% str_extract("\\d+")) %>%
+    # select(scopus_id) %>%
+    mutate(publication_information = auid %>% map(~{
       author_search_prog(au_id = .x,
                            api_key = api_key,
                            verbose = F, view = "COMPLETE", count = 25,
@@ -20,7 +20,7 @@ scopus_get_publication_by_author <- function(data){
     }), 
     api_key = api_key, 
     retrieval_time = Sys.time()) %>%
-    rename(scrapped_ids = scopus_id)
+    mutate(scrapped_ids = auid)
   return(entries)
 }
 

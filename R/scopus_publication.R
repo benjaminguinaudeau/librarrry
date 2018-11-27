@@ -4,16 +4,16 @@
 #' @export
 
 entry_core <- function(.x){
-  message(glue::glue("Retrieving entry {.x$dc_identifier} \t\t {.x$id} from {.x$n} \n"))
-  message(glue(" {.x$dc_title}\n "))
-  response <- abstract_retrieval(id = .x$dc_identifier, 
+  message(glue::glue("Retrieving entry {.x$pub_id} \t\t {.x$id} from {.x$n} \n"))
+  #message(glue(" {.x$dc_title}\n "))
+  response <- abstract_retrieval(id = .x$pub_id, 
                                  identifier = "scopus_id", 
                                  api_key = api_key, 
                                  verbose = F)
   
   if(response$get_statement$status_code == 429){
-    cat(glue("Quota Exceeded \n Stopped at index {.x$batch}"))
-    return(NULL)
+    #cat(glue("Quota Exceeded \n Stopped\n "))
+    stop(glue("Quota Exceeded \n Stopped\n "))
   } else if (response$get_statement$status_code == 200) {
     cat("Retrieval was successfull\n \n")
     return(response$content)
@@ -35,12 +35,12 @@ scopus_get_publication <- function(data){
   
   entry <- data %>%
     #slice(1:4) %>%
-    mutate(dc_identifier = dc_identifier %>% str_extract("\\d+")) %>%
+  #  mutate(dc_identifier = dc_identifier %>% str_extract("\\d+")) %>%
     mutate(n = n()) %>%
     mutate(id = 1:n()) %>%
     split(1:nrow(.)) %>%
     map(entry_core)  %>% 
-    tibble(entries = ., scrapped_ids = data$dc_identifier)
+    tibble(entries = ., scrapped_ids = data$pub_id)
   
   return(entry)
 }

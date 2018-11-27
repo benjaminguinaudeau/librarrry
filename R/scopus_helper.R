@@ -9,6 +9,8 @@ as_tibble_c <- function(x) {
   }
   x %>% as_tibble %>% janitor::clean_names()
 }
+
+
 #' listify
 #' @description This function check whether the input is a list on which we could map. If this is not the case, it encapsualit the input in a list.
 #' @param x a list or a tibble
@@ -55,6 +57,98 @@ tibblize_columns <- function(x){
       x %>% tibble(content = .) %>% listify
     }) #%>%
 }
+
+#' @export
+if_case_1 <- function(x) length(names(x)) == 0 & is.list(x) # This should be bind_row
+#if_case_2 <- function(x, nam) length(nam) == 0 & is.list(x) # This should be simplify
+#' @export
+if_case_3 <- function(x) length(names(x)) == 0 & !is.list(x) # Character case
+#' @export
+if_case_4 <- function(x) length(names(x)) != 0 & is.list(x) # Apply Transform List and Bind-Col
+#' @export
+if_case_5 <- function(x) length(names(x)) != 0 & !is.list(x) # as_tibble
+
+#' @export
+case_1 <- function(element, nam){ # Take element and return tibble
+  element %>%
+    map(~{
+      .x %>%
+        transform_list() %>%
+        janitor::clean_names(.) %>%
+        unnest(x) #%>%
+        #tibblize_columns()
+    }) %>%
+    bind_rows %>%
+    list %>%
+    tibble(.) %>%
+    set_names(nam) %>%
+    janitor::clean_names(.)
+}
+
+#' @export
+case_3 <- function(element, nam = "x"){
+  element %>%
+    as_tibble %>%
+    set_names(nam) %>%
+    janitor::clean_names(.)
+}
+
+#' @export
+case_4 <- function(element, nam){
+  element %>%
+    map2(.y = names(element), ~transform_list(.x, .y)) %>% 
+    bind_cols %>%
+    list %>%
+    tibble %>%
+    set_names(nam) %>%
+    janitor::clean_names(.)
+}
+
+#' transform_list
+#' @param x a response to parse
+#' @return a tibble containing parsed respone
+#' @export
+
+
+transform_list <- function(x, nam = "x"){
+  if(is.null(x)) return(NULL)
+  if(if_case_1(x)) return(case_1(x, nam))
+  #if(if_case_2(x, nam)) return(case_2(x, nam))
+  if(if_case_3(x)) return(case_3(x, nam))
+  if(if_case_4(x)) return(case_4(x, nam))
+  if(if_case_5(x)) return(case_5(x, nam))
+}
+
+#' transform_list_old
+#' @param x a response to parse
+#' @return a tibble containing parsed respone
+#' @export
+
+transform_list_old <- function(x){
+  if (length(names(x)) == 0 & length(x) > 1) {
+    return(x %>% map_df(~{
+      .x %>% transform_list %>% bind_rows %>% janitor::clean_names(.) %>% 
+        tibblize_columns()
+    }) %>% list %>% set_names(names(x)))
+  }
+  x %>% map2_dfc(.y = names(x), ~{
+    if (is.null(.x)) {
+      return(NULL)
+    }
+    if (length(.y) == 0 & length(.x) == 1) {
+      return(tibble(.x) %>% as_tibble_c)
+    }
+    if (is.list(.x)) {
+      return(.x %>% transform_list %>% bind_cols %>% janitor::clean_names(.) %>% 
+               list %>% tibble %>% set_names(.y))
+    }
+    else {
+      return(.x %>% tibble %>% set_names(.y))
+    }
+  })
+}
+
+
 
 #' unlist_tibble_core
 #' @param .x a list to transform into a tibble
@@ -160,13 +254,17 @@ list_to_tibble <- function(x){
   x %>% as.list %>% as_tibble_c
 }
 
+#' unnest_pos
+#' @export
+
+unnest_pos <- purrr::possibly(tidyr::unnest, otherwise = NULL)
+
 #' gather_group
 #' @param x a tibble falsely parsed to gather
 #' @return a gathered tibble
 #' @export
 
 gather_group <- function(x){
-  unnest_pos <- purrr::possibly(unnest, NULL)
 
   var_names <- x %>% names
   var_num <- var_names %>% str_extract("\\d+$") %>% as.numeric %>% ifelse(is.na(.), 0, .)
@@ -179,7 +277,6 @@ gather_group <- function(x){
     })
 }
 
-
 #' map_select
 #' @param x a list from which columns should be selected
 #' @param vars a vector of names to select in x
@@ -187,14 +284,172 @@ gather_group <- function(x){
 #' @export
 
 map_select <- function(x, vars){
-  x <- x %>% unlist %>% as.list
+  #x <- x %>% split(1:nrow(.))
   vars %>% map(~{
     if(any(names(x) == .x)){
       return(x[[.x]])
     } else {
-      return(NA)
+      return(rep(NA, nrow(x)))
     }
   }) %>%
     set_names(vars) %>%
     bind_cols
+}
+
+#' select_pos
+#' @param data a dataframe with columns to select
+#' @param vars a vector of names to select in x
+#' @return selected columns
+#' @export
+
+select_pos <- function(data, vars) return(data[,vars[vars %in% names(data)]])
+
+#' unselect_pos
+#' @param data a dataframe with columns to unselect
+#' @param vars a vector of names to unselect in x
+#' @return unselected columns
+#' @export
+
+unselect_pos <- function(data, vars) return(data[,!names(data) %in% vars])
+
+#' mutate_pos
+#' @param data a dataframe with var to mutate
+#' @param ... arguments to be aplly to mutate
+#' @return mutated dataframe
+#' @export
+
+mutate_pos <- function(data, ...) {
+  mutate_p <- possibly(mutate, otherwise = NULL)
+  
+  tmp <- data %>%
+    mutate_p(...)
+  if(is.null(tmp)) return(data) else return(tmp)
+}
+
+#' rename_pos
+#' @param data a dataframe with var to rename
+#' @param ... arguments to be aplly to rename
+#' @return dataframe with renamed columns
+#' @export
+
+rename_pos <- function(data, ...) {
+  rename_p <- possibly(rename_, otherwise = NULL)
+  
+  tmp <- data %>%
+    rename_p(...)
+  if(is.null(tmp)) return(data) else return(tmp)
+}
+
+#' unnest_pos
+#' @param data a dataframe with var to unnest
+#' @param ... arguments to be aplly to unnest
+#' @return dataframe with unnested columns
+#' @export
+
+
+unnest_pos <- function(data, ...){
+  unnest_p <- possibly(unnest, otherwise = NULL)
+  
+  if(!... %in% names(data)){return(data)}
+  
+  tmp <- data %>%
+    unnest_(...)
+  if(is.null(tmp)) return(data) else return(tmp)
+}
+
+#' simplify_vector
+#' @description Use to simplify variables whose elements are unnecessarily nested into tibble. It just get the value embedded in the tibble and return a character vector.
+#' @param x a variable with tibble to simplify
+#' @return a character vector
+#' @export
+
+
+simplify_vector <- function(x) if(is.null(x)){return(NA_character_)} else{ x %>% unlist %>% paste(., collapse  = "_")}
+
+#' any_f
+#' @description The variable check if any element is F
+#' @param lgl a logical vector
+#' @return a logical vector
+#' @export
+
+any_f <- function(lgl){!any(!lgl)}
+
+#' simplifiable
+#' @description The variable check whether a list element can be simplified
+#' @param x a variable to map on
+#' @return a logical vector T if the variable can be simplified
+#' @export
+
+simplifiable <- function(x){
+  x <- x[!x %>% map_lgl(~is.null(.x)|length(.x) == 0)] 
+  if(!is.list(x)){return(F)}
+  trig1 <- x %>% map_lgl(~is_tibble(.x)) %>% any # Is the first element a tibble? Should be T
+  trig2 <- x %>% map_lgl(~ncol(.x) == 1 & nrow(.x) == 1 ) %>% any_f # Is there any tibble with more than 1 row or 1 column Shoulb be T
+  trig3 <- x %>% map_lgl(~.x[[1]] %>% map_lgl(~!is_tibble(.x)) %>% any ) %>% any # Is the nested element other than a tibble Should be T
+  
+  return(trig1 & trig2 & trig3)
+}
+
+#' list_simplifiable
+#' @param x a variable to check the type for the parsing process
+#' @return a logical vector T if the variable is a list and can be simplifiable
+#' @export
+
+list_simplifiable <- function(x) is.list(x) & simplifiable(x)
+
+#' list_simplifiable
+#' @param x a variable to check the type for the parsing process
+#' @return a logical vector T if the variable is a list and cannot be simplifiable
+#' @export
+
+list_unsimplifiable <- function(x) is.list(x) & !simplifiable(x)
+
+#' unnest_tibble
+#' @description This function check the internal structure of an element an clean it
+#' @param x a tibble whose structure should be cleaned
+#' @return a tibble with cleaned structure
+#' @export
+
+unnest_tibble <- function(x){ # input a tibble
+  if(is.null(x) | length(x) == 0){  # Error Handling
+    return(tibble())
+  }
+  if(is_tibble(x[1,1][[1]][[1]])){ # useless nesting : returns nested tibble
+    if(ncol(x) == 1 & nrow(x) == 1){
+      return(x[1,1][[1]][[1]] %>% unnest_tibble)
+    }
+  } 
+  if(ncol(x) == 1 & x[[1]] %>% map_lgl(is_tibble) %>% `!` %>% any){ # 1 non tibble column : returns same
+    return(x)
+  }
+  
+  tmp <- x %>%
+    mutate_if(list_simplifiable, action_3) %>% # Simplifiable Columns: Unnest tibble with only one element
+    mutate_if(list_unsimplifiable, action_2) # Unsimplifiable Colmuns: Select the colmuns and return 
+  
+  return(tmp)
+}
+
+#' action_2
+#' @param x a list whose structure should be checked and cannot be simplified
+#' @return a list containing cleaned data
+#' @export
+
+action_2 <- function(x){
+  if(is.null(x)|length(x) == 0){return(tibble())}
+  x %>%
+    map(unnest_tibble)
+}
+
+#' action_3
+#' @param x a list containing tibble, which should simplified and transform into character
+#' @return a character vector with the cleaned data
+#' @export
+
+action_3 <- function(x){
+  x %>% 
+    map_chr(~{
+      if(is.null(.x)){return(NA_character_)}
+      .x %>% unlist
+    })
 }

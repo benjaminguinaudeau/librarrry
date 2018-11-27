@@ -12,6 +12,7 @@ scopus_get_authors <- function(ids = NULL, n_batchs = 99, batch_size = 25, api_k
 
   ids_batch <- ids  %>%
     tibble(id = .) %>%
+    sample_n(nrow(.)) %>%
     mutate(index = 1:n()) %>%
     mutate(batch = ((index-1) %/% batch_size)+1) %>%
     filter(batch %in% 1:n_batchs) %>%

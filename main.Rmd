@@ -7,22 +7,24 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-
+devtools::document()
 devtools::load_all()
-#devtools::install()
+devtools::install()
 
 pacman::p_load(dplyr, glue, purrr, stringr, tidyr, jsonlite, rscopus, httr, magrittr)
 
 api_keys <- c("f19f66418460300ea8f6ab71dced56ef", 
               "de161f605b4cddaf6dca837b61e4ae58", 
               "60a5e59310128544264c6b7dd33898ee") # Publication: 19-10
-api_key <- api_keys[3]
+api_key <- api_keys[1]
 
 path <- getwd()
 ```
 
+
+
 ```{r}
-load("../data/authors.Rdata")
+load("../librarian/data/authors.Rdata")
 load("../data/author_publications.Rdata")
 load("../data/publications.Rdata")
 
@@ -35,10 +37,18 @@ load("../data/publications.Rdata")
   * crayon for colored output
 
 ```{r}
+test <- authors %>%
+  sample_n(100) %>%
+  scopus_clean_authors
+  
+```
+
+
+```{r}
 
 add_authors(n_batchs = 100, batch_size = 25, path) # 3000 Authors
 for(jj in 1:10){add_publications_authors(n_authors = 100, path)}
-for(jj in 1:10){add_abstracts(n_abstracts = 100, path)}
+for(jj in 1:10){add_abstracts(n_abstracts = 10, path)}
 ```
 
 ```{r}
@@ -57,5 +67,9 @@ data_api_authors <- data_api[[1]] %>%
 data_api_entreis <- data_api[[2]] %>%
   filter(!duplicated(retrieval_time)) %>%
   mutate(type = "entries")
+```
+
+```{r}
+test <- add_abstracts(n_abstracts = 10, path)
 ```
 

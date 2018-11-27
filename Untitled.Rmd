@@ -1,0 +1,183 @@
+---
+title: "tmp"
+author: "Benjamin"
+date: '2018-10-31'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+pacman::p_load(tidyverse, librarrry)
+load("../librarian/data/publications.Rdata")
+```
+
+```{r}
+publications %>%
+  slice(1:100) %>%
+  select(bibrecord) %>%
+  unnest %>%
+  select(author_group) %>%
+  list %>%
+  View
+
+test$authors[[4]]
+```
+
+
+```{r}
+test <- publications %>% 
+    slice(1:100) 
+.x <- test$bibrecord[[3]]
+
+scopus_clean_publications <- function(publications){
+  test <- publications %>% 
+    slice(1:100) %>%
+    mutate(
+      authors = bibrecord %>% 
+        map(~{
+          if(is.null(.x$author_group)) return(NULL)
+          #if(length(.x$author_group) > 1){
+            tmp <- .x$author_group %>% 
+              map_df(~{
+                if("V1" %in% names(.x)){
+                  return(
+                    .x %>% 
+                      select(matches("V\\d")) %>%
+                      gather_group %>%
+                      unnest
+                      )
+                } else {
+                  .x %>%
+                  gather_group %>% 
+                  select(author) %>% 
+                  unnest
+                }
+              })
+            
+            if(!any(colnames(tmp) == "auid"))  return(NULL)
+            
+            tmp <- tmp %>% 
+              gather_group() %>% 
+              drop_na(auid) %>% 
+              arrange(seq) %>% 
+              map_select(c("seq", "ce_given_name", "ce_surname", "auid")) %>%
+              set_names(c("seq", "first_name", "last_name", "auid"))
+            return(tmp)
+          # } else {
+          #   tmp <- .x$author_group[[1]][,length(.x$author_group[[1]])] %>%
+          #     unnest 
+          #   
+          #   if(!any(colnames(tmp) == "auid"))  return(NULL)
+          #   tmp <- tmp %>%               
+          #     map_select(c("seq", "ce_given_name", "ce_surname", "auid")) %>% 
+          #     set_names(c("seq", "first_name", "last_name", "auid"))
+          #   return(tmp)
+          # }
+        })
+    ) %>%
+    mutate(source_list = bibrecord %>%
+             map( ~ {
+               .x$source[[1]] %>%
+                 map_select(c("codencode", "srcid")) %>%
+                 set_names(c("source_short", "source_list")) %>% 
+                 unnest_pos(source_list)
+             })
+    ) %>%
+    unnest(source_list) %>%
+    mutate(classification = bibrecord %>%
+             map( ~ {
+               .x$enhancement %>% 
+                 listify() %>%
+                 gather_group()
+             })
+    ) %>%
+    mutate(ids = bibrecord %>%
+             map( ~ {
+               tmp <- .x$itemidlist[[1]] %>% 
+                 dplyr::select(matches("V\\d")) %>%
+                 gather_group() 
+               
+               if(!(any(colnames(tmp) == "V"))) return(NULL)
+               
+               tmp %>% 
+                 mutate(is_tibble = map_lgl(V, is.data.frame)) %>%
+                 filter(is_tibble) %>% 
+                 unnest %>%
+                 select(-is_tibble) %>% 
+                 map_select(c("x", "idtype")) %>% 
+                 set_names(c("id_type", "id"))
+             })
+    ) %>%
+    mutate(ref = bibrecord %>%
+             map(~{
+               if(!any(colnames(.x) == "bibliography")) return(NULL)
+               
+               tmp <- .x$bibliography[[1]]$reference[[1]] %>% 
+                 gather_group() %>% 
+                 unnest
+               
+               if(length(tmp$itemid) == 0){return(tibble(NA))}
+               tmp %>% 
+                 select(itemid) %>%
+                 mutate(itemid = itemid %>% 
+                          map(~{
+                            if(is.null(.x)){
+                              tibble(NA)
+                            } else {
+                              .x
+                            }
+                          })) %>%
+                 unnest %>%
+                 map_select(c("x")) %>%
+                 unlist %>%
+                 as.character()
+             })
+    ) %>%
+    mutate(lang = xml_lang %>% map_chr(~ifelse(is.null(.x[1]), NA_character_, as.character(.x[1])))) %>%
+    mutate(publisher = dc_publisher %>% map_chr(~ifelse(is.null(.x[1]), NA_character_, as.character(.x[1])))) %>%
+    mutate(keywords = author_keyword %>%
+             map(~{
+               .x %>% 
+                 gather_group %>% 
+                 map_select("x") %>% 
+                 set_names("keyword")
+             })
+    ) %>%
+    mutate(isbns = prism_isbn %>% 
+             map(~{
+               if(is.null(.x)){
+                 return(tibble(NA))
+               } else {
+                 .x %>%
+                   map_select(c("x", "x1")) %>% 
+                   set_names(c("online_isbn", "print_isbn"))
+               }
+             })
+    ) %>% 
+    mutate(scopus_id = ids %>% map_chr(~{
+      if(is.null(.x)) return(NA_character_)
+      .x %>% filter(id_type == "SCP") %>% 
+        .$id %>% .[1] %>% as.character()
+    })
+    ) %>% 
+    dplyr::select(
+      scopus_id,
+      authors,
+      classification,
+      source_short,
+      source_id,
+      ids,
+      ref,
+      lang,
+      keywords,
+      publisher,
+      isbns
+    ) %>%
+    unnest_pos(source_id)
+}
+
+```
+

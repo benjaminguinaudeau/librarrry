@@ -1,0 +1,158 @@
+---
+title: "Untitled"
+author: "Benjamin"
+date: '2018-11-01'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#devtools::install_github("ropenscilabs/roomba")
+library(roomba)
+path <- getwd()
+n_abstracts <- 10
+step4 %>% list %>% View
+
+```
+
+```{r}
+
+load(glue("{path}/../librarian/data/publications.Rdata"))
+load(glue("{path}/../librarian/data/author_publications.Rdata"))
+init_len <- nrow(publications)
+  
+  message(glue("Getting abstract of {n_abstracts} entries..."))
+  
+  already <- publications$dc_identifier %>% map_chr(1)
+  
+  step4 <- author_publications %>%
+    filter(subtype_description %in% c("Chapter", "Article", "Book", "Conference Paper")) %>%
+    filter(!dc_identifier %in% already) %>%
+    slice(1:n_abstracts) %>%
+    scopus_get_publication
+  
+  #save(step4, file = glue("{path}/../data/tmp/step4.Rdata"))
+  transform_list_prog <- progressively(possibly(transform_list, otherwise = NULL), n_abstracts)
+  
+  message(glue("Parsing information..."))
+  
+  publications <<- publications <- step4$entries %>%
+    map(~{
+      .x$`abstracts-retrieval-response` %>% transform_list_prog
+    }) %>%
+    #map(~{tibblize_columns(.x)}) %>%
+    bind_rows %>%
+    mutate(api_key = api_key, 
+           retrieval_time = Sys.time()) %>%  
+    mutate(dc_identifier  = coredata %>% map_chr(~.x$dc_identifier)) %>%
+    filter(!duplicated(dc_identifier))
+  
+  x <- step4$entries[[1]]$`abstracts-retrieval-response`$coredata
+
+    
+    
+    publications$dc_identifier
+    test 
+```
+* Case
+ + 1
+  + tibble
+  + list
+  + vector
+ + several
+  + tibbles
+  + lists
+  vector
+  
+  
+  
+  # Fälle 
+  
+# Use Cases
+
+```{r}
+
+## heterogene Liste
+case_1 <- list(a = 1, b = 2, c = list(e = list(g = 5, h = 6), d = 4))
+case_1
+
+### repetition
+case_2 <- list(list(a = 1, b = 2)) %>% rep(., 5)
+case_2
+
+### only one character
+case_3 <- list(name = "character")
+```
+  
+# Decsision
+
+```{r}
+x <- step4$entries %>%
+  map(transform_list)
+
+
+  
+ x %>% bind_rows
+x <- x$`abstracts-retrieval-response` %>% transform_list
+transform_list <- function(x){
+  if(length(names(x)) == 0 & length(x) > 1){
+    return(x %>% 
+             map_df(~{
+               x[[1]] %>%
+                 transform_list %>% 
+                 bind_rows %>%
+                 janitor::clean_names(.) %>%
+                 tibblize_columns()
+             }) %>% 
+             list %>% 
+      set_names(names(x)))} # Case with no names transformed with bind_rows
+  
+  x %>%
+    map2_dfc(.y = names(x), ~{
+      if(is.null(.x)){return(NULL)}
+      if(length(.y) == 0 & length(.x) == 1){return(tibble(.x) %>% as_tibble_c)} # 
+      
+      if(is.list(.x)){
+        return(.x %>% 
+                 transform_list %>% 
+                 bind_cols %>%
+                 janitor::clean_names(.) %>% list %>% tibble %>% set_names(.y))
+      } else {
+        return(.x  %>% tibble %>% set_names(.y))
+      }
+    }) 
+}
+
+publications %>% list %>% View
+```
+
+
+# Action
+
+```{r}
+action_1 <- function(x){
+  x %>% 
+    transform_list %>% 
+    bind_cols %>%
+    janitor::clean_names(.)
+}
+
+action_2 <- function(x){
+  x %>% 
+    transform_list %>% 
+    bind_rows %>%
+    set_names(names(x)) %>%
+    janitor::clean_names(.)
+}
+
+# action_3 <- function(x){
+#   x %>% as_tibble_c()
+# }
+```
+  
+  
+  
+  
+  
+  
