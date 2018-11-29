@@ -10,6 +10,17 @@ as_tibble_c <- function(x) {
   x %>% as_tibble %>% janitor::clean_names()
 }
 
+#' %=>%
+#' @export
+
+`%=>%` <- function(input, .otherwise){
+  ifelse(is.null(input), .otherwise, input)
+}
+
+#' is_tibble
+#' @export
+
+is_tibble <- function(x) is.data.frame(x)
 
 #' listify
 #' @description This function check whether the input is a list on which we could map. If this is not the case, it encapsualit the input in a list.

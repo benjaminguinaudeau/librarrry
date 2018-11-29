@@ -4,10 +4,10 @@
 \alias{clean_authors}
 \title{clean_authors}
 \usage{
-clean_authors(authors, n, path, loading_main)
+clean_authors(step1)
 }
 \arguments{
-\item{authors}{a tibble containing authors to clean (response from authors scrapping)}
+\item{step1}{a tibble containing authors to clean (response from parse_authors)}
 }
 \value{
 the cleaned tibble

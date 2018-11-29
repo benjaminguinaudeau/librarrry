@@ -1,10 +1,144 @@
+#' parse_authors
+#' @param authors a tibble containing authors to parse
+#' @return parsed authors
+#' @export
+
+parse_authors <- function(authors, n) {
+  message(glue("Parsing {n} authors"))
+  
+  #unnest_tibble_prog <- progressively(unnest_tibble, .n = n)
+  step1 <- authors %>% 
+    mutate_pos(
+      auid = coredata %>% 
+        map_chr(~{
+          .x[["dc_identifier"]] 
+        }) %>% str_extract("\\d+")
+    ) %>% 
+    slice(1:n) %>% 
+    unselect_pos(c("retrieval_time", "api_key", "status", "fa")) %>% 
+    split(1:nrow(.)) %>% 
+    furrr::future_map(unnest_tibble, .progress = T) %>% 
+    map(~{
+      .x[["affiliation_history"]] <- ifelse(class(.x[["affiliation_history"]]) == "character", tibble(x = NA), .x[["affiliation_history"]])
+      .x
+    }) %>% 
+    bind_rows
+  
+  return(step1)
+}
 
 #' clean_authors
+#' @param step1 a tibble containing authors to clean (response from parse_authors)
+#' @return the cleaned tibble
+#' @export
+
+clean_authors <- function(step1){
+  
+  step2 <- step1 %>%
+    unnest(coredata) %>%
+    mutate(auid = dc_identifier) %>%
+    unselect_pos(c("prism_url", "dc_identifier", "link")) %>%
+    #select(eid, document_count, cited_by_count, citation_count, orcid) %>%
+    mutate(aff_current = affiliation_current %>% 
+             map_chr(~{ .x$id[1] %=>% NA_character_ })
+    ) %>%
+    dplyr::select(-affiliation_current) %>%
+    mutate(aff_hist_id = affiliation_history %>%
+             map("id")
+    ) %>%
+    #dplyr::select(author_profile) %>%
+    dplyr::select(-affiliation_history) %>%
+    unnest(author_profile) %>%
+    select(-status, -date_created) %>%
+    mutate(publication_range = publication_range %>%
+             map(~{.x %=>% tibble(end = NA)})) %>%
+    unnest(publication_range) %>%
+    mutate(preferred_name = preferred_name %>%
+             map(~{.x %=>% tibble(surname = NA)})) %>%
+    unnest(preferred_name) %>%
+    #select(surname, given_name) %>%
+    unselect_pos(c("source", "initials", "indexed_name", "date_locked"))  %>%
+    mutate_pos(affiliation_history = affiliation_history %>% 
+                 map(~{
+                   .x %=>% NULL
+                   tmp <- .x %>%
+                     unselect_pos("source") %>%
+                     mutate_pos(ip_doc = ip_doc %>%
+                                  map(~{
+                                    if(class(.x[["address"]]) == "character") .x[["address"]] <- list(tibble(city = NA_character_))
+                                    return(.x)
+                                  })
+                     ) %>%
+                     unnest_pos("ip_doc") %>%
+                     select(-relationship) %>%
+                     mutate_pos(preferred_name = preferred_name %>%
+                                  map(~{.x %=>% tibble(x = NA) })
+                     ) %>%
+                     unnest_pos("preferred_name") %>%
+                     mutate_pos(address = address %>%
+                                  map(~{.x %=>% tibble(x = NA) })
+                     ) %>%
+                     unnest_pos("address") %>%
+                     rename_pos("aff_id" = "id") %>%
+                     rename_pos("par_id" = "parent") %>%
+                     rename_pos("par_name" = "afdispname") %>%
+                     rename_pos("url" = "org_url") %>%
+                     rename_pos("countryname" = "country_2") %>%
+                     select_pos(c("aff_id", "par_id" , "type", "sort_name", "par_name",
+                                  "url", "country", "countryname", "city", "state", "postal_code", "address_part"))
+                 }, .progress = T)) %>%
+    mutate_pos(name_variant = name_variant %>% map(~{
+      .x %>%
+        select_pos(c("doc_count", "surname", "given_name"))
+    })) %>%
+    mutate_pos(fields = classificationgroup %>%
+                 map(~{
+                   .x %>% unnest_pos("classification")
+                 })
+    ) %>%
+    dplyr::select(-classificationgroup) %>%
+    mutate_pos(journal_history = journal_history  %>% 
+                 map(~{
+                   .x %>%
+                     unselect_pos("type") %>%
+                     unnest_pos("journal")
+                 })
+    ) %>%
+    mutate_pos(subject_areas = subject_areas %>% map(~.x %>% unselect_pos("fa"))) %>%
+    mutate_pos(fields = subject_areas %>%
+                 map2(.y = fields,~{
+                   if(is.null(.x) & is.null(.y)) return(NULL)
+                   if(is.null(.y)) return(.x)
+                   if(is.null(.x)) return(.y)
+                   # .x %=>% return(.y)
+                   # .y %=>% return(.x)
+                   
+                   .x %>% left_join(.y, by = c("code" = "x"))
+                 })) %>%
+    mutate_pos(auid = auid %>% str_extract("\\d+")) %>%
+    select_pos(c("auid", "surname", "given_name", "start", "end",
+                 "document_count", "cited_by_count", "citation_count",
+                 "eid", "orcid",
+                 "aff_current", "aff_hist_id", "affiliation_history",
+                 "journal_history", "fields", "name_variant"))
+  
+  step3 <- step2 %>%
+    #bind_rows(authors_final) %>%
+    filter(!duplicated(auid))
+  
+  #message(glue("{nrow(step3) - length(already)} authors were parsed"))
+  
+  return(step3)
+  
+}
+
+
+#' clean_authors_old
 #' @param authors a tibble containing authors to clean (response from authors scrapping)
 #' @return the cleaned tibble
 #' @export
 
-clean_authors <- function(authors, n, path, loading_main){
+clean_authors_old <- function(authors, n, path, loading_main){
   
   # message("Loading authors_final")
   # load(glue("{path}/../data/authors_final.Rdata"))
