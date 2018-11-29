@@ -10,6 +10,11 @@ as_tibble_c <- function(x) {
   x %>% as_tibble %>% janitor::clean_names()
 }
 
+#'is_not_null
+#' @export
+
+is_not_null <- function(x) return(!is.null(x))
+
 #' %=>%
 #' @export
 
